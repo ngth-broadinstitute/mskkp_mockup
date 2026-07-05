@@ -70,7 +70,7 @@ function cacheElements() {
 
 function setupControls() {
   const options = state.index.datasets
-    .map((dataset) => `<option value="${escapeHtml(dataset.id)}">${escapeHtml(shortDatasetLabel(dataset))}</option>`)
+    .map((dataset) => `<option value="${escapeHtml(dataset.id)}">${escapeHtml(datasetOptionLabel(dataset))}</option>`)
     .join("");
   els.leftDataset.innerHTML = options;
   els.rightDataset.innerHTML = options;
@@ -157,13 +157,15 @@ async function updateCellTypeView() {
   setStatus(els.cellTypeStatus, "Loading");
   try {
     const payload = await cachedJson(`${DATA_ROOT}/celltypes/${cleanFilename(cellType)}.json`);
-    const genes = (payload.genes || []).slice(0, 12);
-    const genePayloads = await Promise.all(genes.map((gene) => cachedJson(`${DATA_ROOT}/genes/${cleanFilename(gene)}.json`)));
-    const categories = genePayloads.map((genePayload) => pairedCellTypeCategory(genePayload, cellType, state.left, state.right)).filter(Boolean);
-    state.currentCellTypePayload = { cellType, categories };
-    renderViolinPlot(els.cellTypePlot, els.cellTypeStatus, categories, "Expression");
-    renderSummaryTable(els.leftCellTypeTable, categories.map((row) => ({ label: row.label, summary: row.leftSummary })), "Gene");
-    renderSummaryTable(els.rightCellTypeTable, categories.map((row) => ({ label: row.label, summary: row.rightSummary })), "Gene");
+    const points = pairedCellTypePoints(payload, state.left, state.right);
+    state.currentCellTypePayload = { cellType, points };
+    renderScatterPlot(els.cellTypePlot, els.cellTypeStatus, points, shortDatasetLabel(state.datasets.get(state.left)), shortDatasetLabel(state.datasets.get(state.right)));
+    const tableRows = points
+      .filter((row) => row.leftSummary.n || row.rightSummary.n)
+      .sort((a, b) => Math.max(b.x, b.y) - Math.max(a.x, a.y))
+      .slice(0, 35);
+    renderSummaryTable(els.leftCellTypeTable, tableRows.map((row) => ({ label: row.label, summary: row.leftSummary })), "Gene");
+    renderSummaryTable(els.rightCellTypeTable, tableRows.map((row) => ({ label: row.label, summary: row.rightSummary })), "Gene");
   } catch (error) {
     clearCanvas(els.cellTypePlot);
     setStatus(els.cellTypeStatus, error.message);
@@ -194,6 +196,21 @@ function pairedCellTypeCategory(genePayload, cellType, leftId, rightId) {
     leftSummary: leftRow?.summary || emptySummary(),
     rightSummary: rightRow?.summary || emptySummary(),
   };
+}
+
+function pairedCellTypePoints(payload, leftId, rightId) {
+  return (payload.genes || []).map((row) => {
+    const datasets = row.datasets || {};
+    const leftSummary = datasets[leftId] || emptySummary();
+    const rightSummary = datasets[rightId] || emptySummary();
+    return {
+      label: row.gene || row.gene_key,
+      x: Number(leftSummary.avg_expression) || 0,
+      y: Number(rightSummary.avg_expression) || 0,
+      leftSummary,
+      rightSummary,
+    };
+  }).filter((row) => row.leftSummary.n || row.rightSummary.n);
 }
 
 function renderSummaryTable(container, rows, firstLabel) {
@@ -311,6 +328,101 @@ function drawAxes(ctx, margins, plotWidth, plotHeight, yMax, yLabel) {
   ctx.restore();
 }
 
+function renderScatterPlot(canvas, statusEl, points, xLabel, yLabel) {
+  const available = points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+  if (!available.length) {
+    clearCanvas(canvas);
+    return setStatus(statusEl, "No plot values available.");
+  }
+  const ctx = prepareCanvas(canvas);
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const margins = { top: 22, right: 24, bottom: 70, left: 72 };
+  const plotWidth = width - margins.left - margins.right;
+  const plotHeight = height - margins.top - margins.bottom;
+  const maxValue = niceCeil(Math.max(0.05, ...available.map((point) => Math.max(point.x, point.y))));
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#fbfcfc";
+  ctx.fillRect(0, 0, width, height);
+  drawScatterAxes(ctx, margins, plotWidth, plotHeight, maxValue, xLabel, yLabel);
+
+  ctx.strokeStyle = "#b8c6c0";
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(margins.left, margins.top + plotHeight);
+  ctx.lineTo(margins.left + plotWidth, margins.top);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = "#345c5f";
+  ctx.globalAlpha = 0.34;
+  available.forEach((point) => {
+    const x = scale(point.x, 0, maxValue, margins.left, margins.left + plotWidth);
+    const y = scale(point.y, 0, maxValue, margins.top + plotHeight, margins.top);
+    ctx.beginPath();
+    ctx.arc(x, y, 2.1, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+
+  const labeled = [...available]
+    .sort((a, b) => Math.max(b.x, b.y) - Math.max(a.x, a.y))
+    .slice(0, 12);
+  ctx.font = "10.5px Inter, sans-serif";
+  ctx.fillStyle = "#33423d";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  labeled.forEach((point) => {
+    const x = scale(point.x, 0, maxValue, margins.left, margins.left + plotWidth);
+    const y = scale(point.y, 0, maxValue, margins.top + plotHeight, margins.top);
+    ctx.beginPath();
+    ctx.arc(x, y, 3.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillText(truncate(point.label, 14), Math.min(x + 5, margins.left + plotWidth - 54), y);
+  });
+  setStatus(statusEl, "");
+}
+
+function drawScatterAxes(ctx, margins, plotWidth, plotHeight, maxValue, xLabel, yLabel) {
+  ctx.strokeStyle = "#c4d0ca";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(margins.left, margins.top);
+  ctx.lineTo(margins.left, margins.top + plotHeight);
+  ctx.lineTo(margins.left + plotWidth, margins.top + plotHeight);
+  ctx.stroke();
+  ctx.fillStyle = "#63706b";
+  ctx.font = "12px Inter, sans-serif";
+  for (let i = 0; i <= 4; i += 1) {
+    const value = (maxValue * i) / 4;
+    const x = scale(value, 0, maxValue, margins.left, margins.left + plotWidth);
+    const y = scale(value, 0, maxValue, margins.top + plotHeight, margins.top);
+    ctx.strokeStyle = i === 0 ? "#c4d0ca" : "#e5ece8";
+    ctx.beginPath();
+    ctx.moveTo(margins.left, y);
+    ctx.lineTo(margins.left + plotWidth, y);
+    ctx.moveTo(x, margins.top);
+    ctx.lineTo(x, margins.top + plotHeight);
+    ctx.stroke();
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.fillText(formatAxisNumber(value), margins.left - 8, y);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(formatAxisNumber(value), x, margins.top + plotHeight + 8);
+  }
+  ctx.fillStyle = "#43504b";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(`${truncate(xLabel, 48)} avg expression`, margins.left + plotWidth / 2, margins.top + plotHeight + 54);
+  ctx.save();
+  ctx.translate(18, margins.top + plotHeight / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText(`${truncate(yLabel, 48)} avg expression`, 0, 0);
+  ctx.restore();
+}
+
 function drawDistribution(ctx, rawValues, x, maxHalfWidth, yMax, margins, plotHeight, color) {
   const values = rawValues.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
   if (!values.length) return;
@@ -402,7 +514,11 @@ function resolveGene(value) {
 }
 
 function shortDatasetLabel(dataset) {
-  return `${dataset.geoSeries} ${dataset.species === "Homo sapiens" ? "Human" : "Mouse"}`;
+  return dataset?.short_label || `${dataset?.geoSeries || "Dataset"} ${dataset?.species === "Homo sapiens" ? "Human" : "Mouse"}`;
+}
+
+function datasetOptionLabel(dataset) {
+  return dataset?.display_label || shortDatasetLabel(dataset);
 }
 
 function prepareCanvas(canvas) {
@@ -471,7 +587,13 @@ window.addEventListener("resize", () => {
       renderViolinPlot(els.genePlot, els.geneStatus, pairedGeneCategories(state.currentGenePayload, state.left, state.right), "Expression");
     }
     if (state.currentCellTypePayload) {
-      renderViolinPlot(els.cellTypePlot, els.cellTypeStatus, state.currentCellTypePayload.categories, "Expression");
+      renderScatterPlot(
+        els.cellTypePlot,
+        els.cellTypeStatus,
+        state.currentCellTypePayload.points,
+        shortDatasetLabel(state.datasets.get(state.left)),
+        shortDatasetLabel(state.datasets.get(state.right)),
+      );
     }
   });
 });

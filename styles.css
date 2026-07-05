@@ -1,0 +1,223 @@
+:root {
+  --bg: #f7f8f8;
+  --surface: #fff;
+  --surface-soft: #f2f5f4;
+  --ink: #17201c;
+  --muted: #63706b;
+  --line: #dbe4df;
+  --line-strong: #c1cec8;
+  --accent: #2f6f73;
+  --left: #2f6f73;
+  --right: #c06938;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.5;
+}
+
+.page-shell {
+  width: min(1240px, calc(100% - 36px));
+  margin: 0 auto;
+  padding: 34px 0 56px;
+}
+
+.page-header {
+  max-width: 780px;
+  padding: 12px 0 20px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1, h2, h3, p { margin-top: 0; }
+h1 { margin-bottom: 10px; font-size: clamp(2rem, 4vw, 3.7rem); line-height: 1.04; letter-spacing: 0; }
+h2 { margin-bottom: 0; font-size: clamp(1.45rem, 2vw, 2rem); line-height: 1.15; }
+h3 { margin-bottom: 0; font-size: 1rem; line-height: 1.2; }
+.lede { margin-bottom: 0; color: #43504b; font-size: 1.05rem; }
+
+.section-block {
+  margin-top: 20px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.section-heading.with-control { align-items: center; }
+.caption { max-width: 420px; margin-bottom: 0; color: var(--muted); font-size: 0.9rem; text-align: right; }
+
+.control {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.control.compact { min-width: min(320px, 100%); }
+
+.control input,
+.control select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.94rem;
+  font-weight: 500;
+  padding: 8px 12px;
+}
+
+.paired-panels,
+.paired-tables {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.panel,
+.plot-card,
+.table-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.panel-title,
+.plot-title,
+.table-card h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.panel-title span { color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
+
+canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1.5;
+  background: #fbfcfc;
+}
+
+.plot-card {
+  position: relative;
+  margin-bottom: 14px;
+}
+
+.plot-card canvas { aspect-ratio: 3.05; }
+
+.plot-status {
+  position: absolute;
+  inset: 49px 0 auto 0;
+  z-index: 1;
+  padding: 14px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  pointer-events: none;
+}
+
+.plot-status:empty { display: none; }
+
+.dataset-key,
+.legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.legend-row { margin-top: 14px; }
+
+.dataset-key span,
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.chip,
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.chip.left { background: var(--left); }
+.chip.right { background: var(--right); }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+th, td {
+  padding: 8px 11px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+th {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+td.numeric,
+th.numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+tr:last-child td { border-bottom: 0; }
+.empty-state, .status { padding: 15px; color: var(--muted); font-size: 0.9rem; }
+
+@media (max-width: 860px) {
+  .page-shell { width: min(100% - 24px, 720px); padding-top: 24px; }
+  .section-block { padding: 16px; }
+  .controls, .paired-panels, .paired-tables, .section-heading, .section-heading.with-control { grid-template-columns: 1fr; display: grid; align-items: start; }
+  .caption { text-align: left; }
+  .plot-title { display: grid; align-items: start; }
+}

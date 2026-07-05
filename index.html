@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MSKKP Dataset Comparison</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="page-header">
+        <p class="eyebrow">MSKKP static dataset explorer</p>
+        <h1>Dataset vs Dataset Single-Cell Comparison</h1>
+        <p class="lede">Compare two ingested musculoskeletal single-cell datasets from the standardized outputs.</p>
+      </header>
+
+      <section class="section-block controls" aria-label="Dataset controls">
+        <label class="control">
+          <span>Left dataset</span>
+          <select id="left-dataset"></select>
+        </label>
+        <label class="control">
+          <span>Right dataset</span>
+          <select id="right-dataset"></select>
+        </label>
+      </section>
+
+      <section class="section-block" aria-labelledby="overview-title">
+        <div class="section-heading">
+          <h2 id="overview-title">Dataset Overview</h2>
+          <p class="caption">Display-sampled UMAPs colored by broad marker-score cell label.</p>
+        </div>
+        <div class="paired-panels">
+          <article class="panel">
+            <div class="panel-title">
+              <h3 id="left-title">Left dataset</h3>
+              <span id="left-count">Loading</span>
+            </div>
+            <canvas id="left-umap" width="720" height="520"></canvas>
+          </article>
+          <article class="panel">
+            <div class="panel-title">
+              <h3 id="right-title">Right dataset</h3>
+              <span id="right-count">Loading</span>
+            </div>
+            <canvas id="right-umap" width="720" height="520"></canvas>
+          </article>
+        </div>
+        <div id="legend" class="legend-row"></div>
+      </section>
+
+      <section class="section-block" aria-labelledby="gene-title">
+        <div class="section-heading with-control">
+          <h2 id="gene-title">Gene Comparison</h2>
+          <label class="control compact">
+            <span>Gene</span>
+            <input id="gene-selector" list="gene-options" autocomplete="off" />
+            <datalist id="gene-options"></datalist>
+          </label>
+        </div>
+        <div class="plot-card">
+          <div class="plot-title">
+            <h3>Expression by cell type</h3>
+            <div class="dataset-key">
+              <span><i class="chip left"></i><span id="left-key">Left</span></span>
+              <span><i class="chip right"></i><span id="right-key">Right</span></span>
+            </div>
+          </div>
+          <div id="gene-status" class="plot-status">Loading</div>
+          <canvas id="gene-plot" width="1100" height="360"></canvas>
+        </div>
+        <div class="paired-tables">
+          <article class="table-card">
+            <h3 id="left-gene-table-title">Left summaries</h3>
+            <div id="left-gene-table"></div>
+          </article>
+          <article class="table-card">
+            <h3 id="right-gene-table-title">Right summaries</h3>
+            <div id="right-gene-table"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section-block" aria-labelledby="celltype-title">
+        <div class="section-heading with-control">
+          <h2 id="celltype-title">Cell-Type Comparison</h2>
+          <label class="control compact">
+            <span>Cell type</span>
+            <select id="celltype-selector"></select>
+          </label>
+        </div>
+        <div class="plot-card">
+          <div class="plot-title">
+            <h3>Expression across marker genes</h3>
+            <div class="dataset-key">
+              <span><i class="chip left"></i><span id="left-key-celltype">Left</span></span>
+              <span><i class="chip right"></i><span id="right-key-celltype">Right</span></span>
+            </div>
+          </div>
+          <div id="celltype-status" class="plot-status">Loading</div>
+          <canvas id="celltype-plot" width="1100" height="360"></canvas>
+        </div>
+        <div class="paired-tables">
+          <article class="table-card">
+            <h3 id="left-celltype-table-title">Left summaries</h3>
+            <div id="left-celltype-table"></div>
+          </article>
+          <article class="table-card">
+            <h3 id="right-celltype-table-title">Right summaries</h3>
+            <div id="right-celltype-table"></div>
+          </article>
+        </div>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

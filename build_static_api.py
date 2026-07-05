@@ -4,10 +4,11 @@
 import csv
 import gzip
 import json
-import math
 import re
 from collections import Counter, defaultdict
 from pathlib import Path
+
+import numpy as np
 
 ROOT = Path(__file__).resolve().parent
 SOURCE_ROOT = ROOT.parent / "singlecell_ingest_10" / "processed"
@@ -37,6 +38,21 @@ CELLTYPE_COLORS = {
     "t_cell_or_nk": "#EDC948",
     "erythroid_or_mk": "#9C755F",
     "other": "#BAB0AC",
+}
+
+DATASET_LABELS = {
+    "GSE106236": {
+        "short": "Mouse periosteal stem cells",
+        "display": "Mouse periosteal stem cells - Debnath 2018 (GSE106236)",
+    },
+    "GSE122465": {
+        "short": "Mouse bone marrow niche",
+        "display": "Mouse bone marrow niche - Baccin 2019 (GSE122465)",
+    },
+    "GSE196678": {
+        "short": "Human OA subchondral bone",
+        "display": "Human OA subchondral bone - Su 2022 (GSE196678)",
+    },
 }
 
 
@@ -86,6 +102,19 @@ def dataset_id(dataset_name):
     return clean_filename(dataset_name)
 
 
+def dataset_labels(meta):
+    labels = DATASET_LABELS.get(meta.get("geoSeries")) or DATASET_LABELS.get(meta.get("datasetId"))
+    if labels:
+        return labels
+    species = "Human" if meta.get("species") == "Homo sapiens" else "Mouse" if meta.get("species") == "Mus musculus" else meta.get("species", "Dataset")
+    tissue = str(meta.get("tissue") or meta.get("organ") or "single-cell dataset").strip()
+    geo = meta.get("geoSeries") or meta.get("datasetId") or meta.get("datasetName")
+    return {
+        "short": f"{species} {tissue}",
+        "display": f"{species} {tissue} ({geo})",
+    }
+
+
 def build_dataset_records():
     records = []
     for dataset_dir in sorted(p for p in SOURCE_ROOT.iterdir() if p.is_dir()):
@@ -108,11 +137,14 @@ def write_index(records):
     celltypes = set()
     for record in records:
         meta = record["metadata"]
+        labels = dataset_labels(meta)
         counts = Counter(row["cell_type__kp"] for row in record["samples"])
         celltypes.update(counts)
         datasets.append({
             "id": record["id"],
             "datasetName": meta["datasetName"],
+            "short_label": labels["short"],
+            "display_label": labels["display"],
             "geoSeries": meta.get("geoSeries"),
             "species": meta.get("species"),
             "organ": meta.get("organ"),
@@ -232,6 +264,58 @@ def summarize_values(values):
     }
 
 
+def canonical_gene_key(gene):
+    return str(gene).upper()
+
+
+def update_display_gene(current, incoming):
+    if not current:
+        return incoming
+    if incoming.isupper() and not current.isupper():
+        return incoming
+    if len(incoming) < len(current):
+        return incoming
+    return current
+
+
+def add_celltype_gene_summaries(record, celltype_payloads):
+    did = record["id"]
+    samples = record["samples"]
+    indices_by_celltype = defaultdict(list)
+    for index, sample in enumerate(samples):
+        indices_by_celltype[sample["cell_type__kp"]].append(index)
+    indices_by_celltype = {
+        cell_type: np.asarray(indices, dtype=np.int64)
+        for cell_type, indices in indices_by_celltype.items()
+        if indices
+    }
+
+    with gzip.open(record["dir"] / "norm_counts.tsv.gz", "rt") as handle:
+        header = handle.readline().rstrip("\n").split("\t")
+        cells = header[1:]
+        if cells != [row["ID"] for row in samples]:
+            raise RuntimeError(f"Cell order mismatch for {did}")
+        for line in handle:
+            gene, values_text = line.rstrip("\n").split("\t", 1)
+            values = np.fromstring(values_text, sep="\t", dtype=np.float32)
+            if values.size != len(samples):
+                raise RuntimeError(f"Expression row length mismatch for {did} {gene}")
+            gene_key = canonical_gene_key(gene)
+            for cell_type, indices in indices_by_celltype.items():
+                selected = values[indices]
+                if selected.size == 0:
+                    continue
+                payload = celltype_payloads[cell_type]
+                payload["cell_type"] = cell_type
+                row = payload["genes"].setdefault(gene_key, {"gene": gene, "gene_key": gene_key, "datasets": {}})
+                row["gene"] = update_display_gene(row["gene"], gene)
+                row["datasets"][did] = {
+                    "n": int(selected.size),
+                    "avg_expression": round(float(selected.mean()), 5),
+                    "pct_expressing": round(float(np.count_nonzero(selected > 0) / selected.size), 5),
+                }
+
+
 def write_gene_and_celltype_endpoints(records):
     gene_panel = collect_gene_panel(records)
     gene_payloads = {
@@ -242,7 +326,6 @@ def write_gene_and_celltype_endpoints(records):
         }
         for gene in gene_panel
     }
-    celltype_gene_candidates = defaultdict(set)
     celltype_payloads = defaultdict(lambda: {"cell_type": None, "genes": {}})
 
     for record in records:
@@ -252,9 +335,6 @@ def write_gene_and_celltype_endpoints(records):
         cells, expr = read_expression_rows(record["dir"] / "norm_counts.tsv.gz", gene_panel)
         if cells != [row["ID"] for row in samples]:
             raise RuntimeError(f"Cell order mismatch for {did}")
-        for row in record["markers"]:
-            if int(float(row.get("rank") or 9999)) <= 12:
-                celltype_gene_candidates[row["cell_type__kp"]].add(row["gene"])
         for gene, values in expr.items():
             dataset_rows = []
             for cell_type in cell_types:
@@ -272,17 +352,21 @@ def write_gene_and_celltype_endpoints(records):
         "items": [{"gene": gene, "file": f"data/genes/{clean_filename(gene)}.json"} for gene in gene_panel],
     })
 
-    # Cell-type endpoints reuse gene expression endpoints in the frontend, but
-    # keep a compact per-cell-type gene list for pair-specific plotting.
-    panel_by_upper = {gene.upper(): gene for gene in gene_panel}
-    curated_upper = {gene.upper() for gene in CURATED_GENES}
-    for cell_type, genes in sorted(celltype_gene_candidates.items()):
-        available = {panel_by_upper[gene.upper()] for gene in genes if gene.upper() in panel_by_upper}
-        selected = sorted(available, key=lambda gene: (gene.upper() not in curated_upper, gene.upper()))[:14]
+    for record in records:
+        add_celltype_gene_summaries(record, celltype_payloads)
+
+    # Cell-type scatter endpoints are summary-only: every retained gene gets
+    # average expression per dataset in this cell type, while per-cell sampled
+    # values remain limited to the gene violin endpoints above.
+    for cell_type, payload in sorted(celltype_payloads.items()):
+        genes = sorted(
+            payload["genes"].values(),
+            key=lambda row: (-max((summary["avg_expression"] for summary in row["datasets"].values()), default=0), row["gene_key"]),
+        )
         write_json(DATA / "celltypes" / f"{clean_filename(cell_type)}.json", {
             "cell_type": cell_type,
-            "genes": selected,
-            "note": "Top marker genes across the ingested datasets for this broad cell label.",
+            "genes": genes,
+            "note": "All retained genes summarized by average log-normalized expression for this broad cell label.",
         })
 
 
